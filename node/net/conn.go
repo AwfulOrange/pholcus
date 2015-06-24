@@ -36,23 +36,23 @@ func (self *Conn) RemoteAddr() string {
 }
 
 func (self *Conn) Close() error {
-	self.Lock()
+	// self.Lock()
 	err := self.conn.Close()
-	self.Unlock()
+	// self.Unlock()
 	return err
 }
 
 func (self *Conn) Write(b []byte) (int, error) {
-	self.Lock()
+	// self.Lock()
 	write_len, err := self.conn.Write(b)
-	self.Unlock()
+	// self.Unlock()
 	return write_len, err
 }
 
 func (self *Conn) Read(b []byte) (int, error) {
-	self.Lock()
+	// self.Lock()
 	read_len, err := self.conn.Read(b)
-	self.Unlock()
+	// self.Unlock()
 	return read_len, err
 }
 
@@ -62,4 +62,8 @@ func (self *Conn) Block() {
 
 func (self *Conn) Unblock() {
 	self.block <- true
+}
+
+func (self *Conn) Get() net.Conn {
+	return self.conn
 }

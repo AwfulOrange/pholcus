@@ -2,6 +2,7 @@
 package net
 
 import (
+	// "bufio"
 	"github.com/henrylee2cn/pholcus/runtime/cache"
 	"github.com/henrylee2cn/pholcus/runtime/status"
 	"log"
@@ -47,35 +48,45 @@ func (self *Network) Server() {
 
 // 服务器先读后写
 func (self *Network) serverHandle(conn *Conn) {
-	request := make([]byte, 4096) // set maxium request length to 2048KB to prevent flood attack
 	defer func() {
-		conn.Close()
+		self.close(conn)
 	}()
 	for {
+		request := make([]byte, 4096) // set maxium request length to 2048KB to prevent flood attack
+		// log.Println("下一轮读取等待")
 		read_len, err := conn.Read(request)
+		// request, err := bufio.NewReader(conn.Get()).ReadBytes(byte(94))
+		// log.Println("获得新一轮信息")
 		if err != nil {
-			log.Println(err)
-			continue
+			// log.Println(err)
+			break
 		}
-
 		if read_len == 0 {
-			continue // connection already closed by client
+			break // connection already closed by client
 		}
+		// log.Println(request[:read_len])
 
-		data, err := unmarshal(request[:read_len])
+		// 处理粘包并解码
+		datas, err := unmarshal([]byte(request[:read_len]))
+		// log.Println("信息：", data)
+
 		if err != nil {
 			continue
 		}
-
-		self.serveReceive(data)
-
-		request = make([]byte, 4096) // clear last read content
+		// log.Println("信息：", datas)
+		// i := 0
+		for _, data := range datas {
+			// i++
+			// log.Println("datas计数", i)
+			data.From = conn.RemoteAddr()
+			self.serveReceive(data)
+		}
 	}
 }
 
 // 处理接收数据
 func (self *Network) serveReceive(data *cache.NetData) {
-	log.Println("接收到", *data)
+	// log.Println("接收到", *data)
 	switch data.Type {
 	case status.REQTASK:
 		cache.ReceiveDocker <- data
@@ -102,37 +113,41 @@ RetryLabel:
 
 	// 开启该连接处理协程
 	go self.clientHandle(self.perHandle(conn))
-
 	log.Printf(" *     —— 成功连接到服务器：%v ——", conn.RemoteAddr().String())
+
+	// 当与服务器失连后，自动重新连接
+	self.waitRetry()
+	goto RetryLabel
 }
 
 // 客户端先写后读
 func (self *Network) clientHandle(conn *Conn) {
 	defer func() {
-		conn.Close()
+		self.close(conn)
 		// close connection before exit
 	}()
-	request := make([]byte, 4096) // set maxium request length to 2048KB to prevent flood attack
-	i := 0
 	for {
-		i++
-		// log.Printf("第 %v 次写入请求", i)
-		// log.Printf("发送通道剩余数据 %v 个", len(cache.SendDocker))
-
 		if self.clientSend() {
+			request := make([]byte, 4096) // set maxium request length to 2048KB to prevent flood attack
 			read_len, err := conn.Read(request)
-			if err != nil || read_len == 0 {
-				continue
+			// request, err := bufio.NewReader(conn.Get()).ReadBytes(byte(94))
+			if err != nil {
+				break
+			}
+			if read_len == 0 {
+				break // connection already closed by client
 			}
 
-			data, err := unmarshal(request[:read_len])
+			// 处理粘包并解码
+			datas, err := unmarshal(request)
 			if err != nil {
 				continue
 			}
 
-			self.clientReceive(data)
-
-			request = make([]byte, 4096) // clear last read content
+			for _, data := range datas {
+				data.From = conn.RemoteAddr()
+				self.clientReceive(data)
+			}
 		}
 	}
 }
@@ -146,6 +161,8 @@ func (self *Network) clientSend() (gotoRead bool) {
 	case status.REQTASK:
 		gotoRead = true
 	case status.LOG:
+		gotoRead = false
+	default:
 		gotoRead = false
 	}
 
@@ -173,6 +190,7 @@ func (self *Network) clientReceive(data *cache.NetData) {
 
 //实时发送点对点信息
 func (self *Network) AutoSend(data *cache.NetData) {
+	self.WaitConn()
 	if data.To == "" {
 		self.randomSend(data)
 	} else {
@@ -180,9 +198,15 @@ func (self *Network) AutoSend(data *cache.NetData) {
 	}
 }
 
+// 广播信息
+func (self *Network) broadcast(data *cache.NetData) {
+	for _, conn := range self.Conns {
+		self.send(conn, data)
+	}
+}
+
 // 随机点对点发信息
 func (self *Network) randomSend(data *cache.NetData) {
-	self.WaitConn()
 	for _, conn := range self.Conns {
 		self.send(conn, data)
 		return
@@ -196,7 +220,8 @@ func (self *Network) sendWithClose(conn *Conn, data *cache.NetData) {
 }
 
 func (self *Network) send(conn *Conn, data *cache.NetData) {
-	data.From = self.LocalAddr
+	// data.From = self.LocalAddr
+	// log.Println(data)
 	d, err := marshal(data)
 	if err != nil {
 		log.Println("编码出错了", err)
@@ -211,6 +236,30 @@ func (self *Network) WaitConn() {
 	for len(self.Conns) == 0 {
 		time.Sleep(5e8)
 	}
+}
+
+// 轮询等待，直到没有连接
+func (self *Network) waitRetry() {
+	for len(self.Conns) != 0 {
+		time.Sleep(5e8)
+	}
+}
+
+// 轮询等待，直到有连接生成
+func (self *Network) HasConn() bool {
+	if len(self.Conns) == 0 {
+		return false
+	}
+	return true
+}
+
+func (self *Network) close(conn *Conn) {
+	log.Printf(" *     —— 已和 %v 断开连接！", conn.RemoteAddr())
+	delete(self.Conns, conn.RemoteAddr())
+	conn.Close()
+}
+func (self *Network) reConn() {
+	go self.Client()
 }
 
 func (self *Network) GetRunMode() int {
@@ -239,7 +288,7 @@ func (self *Network) perHandle(conn net.Conn) *Conn {
 func (self *Network) log(data *cache.NetData) {
 	log.Println(` ********************************************************************************************************************************************** `)
 	log.Printf(" * ")
-	log.Printf(" *     客户端 [ %s ]    %v", data.From, data.Body)
+	log.Printf(" *     客户端 [ %s ]    %s", data.From, data.Body)
 	log.Printf(" * ")
 	log.Println(` ********************************************************************************************************************************************** `)
 }

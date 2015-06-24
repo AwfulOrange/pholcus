@@ -47,6 +47,9 @@ func InitSpiders() int {
 
 // 从task准备运行条件
 func TaskToReady(t *task.Task) {
+	// 清空历史任务
+	Pholcus.Spiders.Reset()
+
 	// 更改全局配置
 	cache.Task.OutType = t.OutType
 	cache.Task.ThreadNum = t.ThreadNum

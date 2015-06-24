@@ -1,5 +1,9 @@
 ﻿package task
 
+import (
+// "log"
+)
+
 const (
 	OWNERLESS = iota
 	READY
@@ -103,6 +107,7 @@ func (self *TaskJar) Pull() *Task {
 	task.Status = EXECING
 	self.Execing = append(self.Execing, one)
 	self.Ready = self.Ready[1:]
+	// log.Println(task)
 	return task
 }
 

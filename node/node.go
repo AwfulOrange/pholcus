@@ -68,6 +68,7 @@ func PholcusRun() {
 		return
 	}
 
+	// 循环处理请求
 	go Pholcus.reqHandle()
 }
 
@@ -89,18 +90,26 @@ func (self *Node) AddNewTask(spiders []string, keywords string) {
 
 	// 存入
 	self.tasks.Push(t)
-	log.Printf(" *     [新增任务]   详情： %#v", *t)
+	// log.Printf(" *     [新增任务]   详情： %#v", *t)
 }
 
-// 请求任务，客户端模式专用
+// 请求任务，客户端模式专用，网络重连后重新发送请求
 func (self *Node) DownTask() *task.Task {
+startLabel:
+	self.WaitConn()
+
 	if len(self.tasks.Ready) == 0 {
 		go cache.PushNetData(status.REQTASK, nil, "")
 	}
 
 	for len(self.tasks.Ready) == 0 {
+		if !self.HasConn() {
+			goto startLabel
+		}
 		time.Sleep(5e7)
+		continue
 	}
+
 	return self.tasks.Pull()
 }
 
@@ -111,6 +120,7 @@ func (self *Node) reqHandle() {
 		case status.REQTASK:
 			self.sendTask(data)
 			self.GetConn(data.From).Unblock()
+			// log.Println("请求处理完成，已解除服务器读取循环的阻塞")
 		case status.TASK:
 			self.receiveTask(data)
 		}
@@ -133,7 +143,7 @@ func (self *Node) sendTask(data *cache.NetData) {
 
 // 将接收来的任务加入库
 func (self *Node) receiveTask(data *cache.NetData) {
-	log.Println("将任务入库", data)
+	// log.Println("将任务入库", data)
 	d, err := json.Marshal(data.Body)
 	if err != nil {
 		log.Println("json编码失败", data.Body)

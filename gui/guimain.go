@@ -45,7 +45,14 @@ func Exec(count int) {
 
 	// 任务执行
 	status.Crawl = status.RUN
-	go GoRun(count)
+
+	// 根据模式选择合理的并发
+	if cache.Task.RunMode == status.OFFLINE {
+		go GoRun(count)
+	} else {
+		// 保证了打印信息的同步输出
+		GoRun(count)
+	}
 }
 
 // 任务执行
