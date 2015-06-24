@@ -24,7 +24,8 @@ func unmarshal(data []byte) (datas []*cache.NetData, err error) {
 			offset++
 			continue
 		}
-		if v == byte(94) {
+		// 匹配分隔符"   }^  "
+		if v == byte(94) && data[k-1] == byte(125) {
 			d := new(cache.NetData)
 			err = json.Unmarshal(data[offset:k], d)
 			datas = append(datas, d)
