@@ -1,22 +1,28 @@
 ﻿package node
 
 import (
-	"encoding/json"
 	"github.com/henrylee2cn/pholcus/node/crawlpool"
-	. "github.com/henrylee2cn/pholcus/node/net"
 	"github.com/henrylee2cn/pholcus/node/spiderqueue"
 	"github.com/henrylee2cn/pholcus/node/task"
 	"github.com/henrylee2cn/pholcus/runtime/cache"
 	"github.com/henrylee2cn/pholcus/runtime/status"
+	"github.com/henrylee2cn/teleport"
 	"log"
 	"strconv"
 	"time"
 )
 
 type Node struct {
-	*Network
+	// 运行模式
+	RunMode int
+	// 服务器端口号
+	Port string
+	// 服务器地址（不含Port）
+	Master string
+	// socket长连接双工通信接口，json数据传输
+	teleport.Teleport
 	// 节点间传递的任务的存储库
-	tasks *task.TaskJar
+	*task.TaskJar
 	// 当前任务的蜘蛛队列
 	Spiders spiderqueue.SpiderQueue
 	// 爬行动作的回收池
@@ -27,16 +33,14 @@ type Node struct {
 
 func newPholcus() *Node {
 	return &Node{
-		Network: &Network{
-			RunMode: cache.Task.RunMode,
-			Port:    ":" + strconv.Itoa(cache.Task.Port),
-			Master:  cache.Task.Master,
-			Conns:   map[string]*Conn{},
-		},
-		tasks:   task.NewTaskJar(),
-		Spiders: spiderqueue.New(),
-		Crawls:  crawlpool.New(),
-		Status:  status.RUN,
+		RunMode:  cache.Task.RunMode,
+		Port:     ":" + strconv.Itoa(cache.Task.Port),
+		Master:   cache.Task.Master,
+		Teleport: teleport.New(),
+		TaskJar:  task.NewTaskJar(),
+		Spiders:  spiderqueue.New(),
+		Crawls:   crawlpool.New(),
+		Status:   status.RUN,
 	}
 }
 
@@ -49,17 +53,17 @@ func PholcusRun() {
 		return
 	}
 	Pholcus = newPholcus()
-	switch Pholcus.GetRunMode() {
+	switch Pholcus.RunMode {
 	case status.SERVER:
 		if Pholcus.checkPort() {
 			log.Printf("                                                                                                          ！！当前运行模式为：[ 服务器 ] 模式！！")
-			go Pholcus.Server()
+			Pholcus.Teleport.SetAPI(ServerApi).SetUID("服务端").Server(Pholcus.Port)
 		}
 
 	case status.CLIENT:
 		if Pholcus.checkAll() {
 			log.Printf("                                                                                                          ！！当前运行模式为：[ 客户端 ] 模式！！")
-			go Pholcus.Client()
+			Pholcus.Teleport.SetAPI(ClientApi).Client(Pholcus.Master, Pholcus.Port)
 		}
 	// case status.OFFLINE:
 	// 	fallthrough
@@ -67,9 +71,13 @@ func PholcusRun() {
 		log.Printf("                                                                                                          ！！当前运行模式为：[ 单机 ] 模式！！")
 		return
 	}
+	// 开启实时log发送
+	go Pholcus.log()
+}
 
-	// 循环处理请求
-	go Pholcus.reqHandle()
+// 返回节点数
+func (self *Node) CountNodes() int {
+	return self.Teleport.CountNodes()
 }
 
 // 生成task并添加至库，服务器模式专用
@@ -89,73 +97,34 @@ func (self *Node) AddNewTask(spiders []string, keywords string) {
 	t.MaxPage = cache.Task.MaxPage
 
 	// 存入
-	self.tasks.Push(t)
+	self.TaskJar.Push(t)
 	// log.Printf(" *     [新增任务]   详情： %#v", *t)
 }
 
-// 请求任务，客户端模式专用，网络重连后重新发送请求
+// 客户端请求获取任务
+func (self *Node) GetTaskAlways() {
+	self.Request(nil, "task")
+}
+
+// 客户端模式模式下获取任务
 func (self *Node) DownTask() *task.Task {
-startLabel:
-	self.WaitConn()
-
-	if len(self.tasks.Ready) == 0 {
-		go cache.PushNetData(status.REQTASK, nil, "")
-	}
-
-	for len(self.tasks.Ready) == 0 {
-		if !self.HasConn() {
-			goto startLabel
-		}
-		time.Sleep(5e7)
-		continue
-	}
-
-	return self.tasks.Pull()
-}
-
-func (self *Node) reqHandle() {
-	for {
-		data := <-cache.ReceiveDocker
-		switch data.Type {
-		case status.REQTASK:
-			self.sendTask(data)
-			self.GetConn(data.From).Unblock()
-			// log.Println("请求处理完成，已解除服务器读取循环的阻塞")
-		case status.TASK:
-			self.receiveTask(data)
-		}
-	}
-}
-
-// 分发任务
-func (self *Node) sendTask(data *cache.NetData) {
-	var t task.Task
-	var ok bool
-	for {
-		if t, ok = self.tasks.Out(data.From, len(self.Conns)); ok {
+	for len(self.TaskJar.Ready) == 0 {
+		if self.CountNodes() != 0 {
+			self.GetTaskAlways()
 			break
 		}
-		time.Sleep(1e9)
+		time.Sleep(5e7)
 	}
-	cache.PushNetData(status.TASK, t, data.From)
-	self.AutoSend(<-cache.SendDocker)
+	for len(self.TaskJar.Ready) == 0 {
+		time.Sleep(5e7)
+	}
+	return self.TaskJar.Pull()
 }
 
-// 将接收来的任务加入库
-func (self *Node) receiveTask(data *cache.NetData) {
-	// log.Println("将任务入库", data)
-	d, err := json.Marshal(data.Body)
-	if err != nil {
-		log.Println("json编码失败", data.Body)
-		return
+func (self *Node) log() {
+	for {
+		self.Teleport.Request(<-cache.SendChan, "log")
 	}
-	t := &task.Task{}
-	err = json.Unmarshal(d, t)
-	if err != nil {
-		log.Println("json解码失败", data.Body)
-		return
-	}
-	self.tasks.Into(t)
 }
 
 func (self *Node) checkPort() bool {

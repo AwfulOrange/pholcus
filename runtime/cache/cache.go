@@ -81,19 +81,13 @@ type NetData struct {
 }
 
 var (
-	// 接收数据的缓存池(目前客户端存放来自服务器的Tasks，服务器存放来自客户端的报告)
-	ReceiveDocker = make(chan *NetData, 1024)
 	// 发送数据的缓存池(目前只在客户端存放将要发送给服务器的报告)
-	SendDocker = make(chan *NetData, 1024)
+	SendChan = make(chan interface{}, 1024)
 )
 
 // 生成并发送信息，注意body不可为变量地址
-func PushNetData(Type int, Body interface{}, To string) {
-	SendDocker <- &NetData{
-		Type: Type,
-		Body: Body,
-		To:   To,
-	}
+func PushNetData(body interface{}) {
+	SendChan <- body
 }
 
 //****************************************初始化*******************************************\\

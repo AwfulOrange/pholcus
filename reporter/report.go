@@ -20,7 +20,7 @@ func init() {
 
 func (self *Report) send(str string) {
 	if cache.Task.RunMode != status.OFFLINE {
-		cache.PushNetData(status.LOG, str, "")
+		cache.PushNetData(str)
 	}
 }
 

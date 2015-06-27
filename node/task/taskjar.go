@@ -33,6 +33,8 @@ func NewTaskJar() *TaskJar {
 	}
 }
 
+// var Jar = NewTaskJar()
+
 // // 向客户端输出一批任务[]Task
 // func (self *TaskJar) Out(client string, clientNum int) []Task {
 // 	last := len(self.Ownerless)
