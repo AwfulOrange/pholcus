@@ -1,8 +1,8 @@
 ## pholcus
 
-Pholcus（幽灵蛛）是一款纯Go语言编写的重量级爬虫软件，清新的GUI界面，优雅的爬虫规则、可控的高并发、任意的批量任务、多种输出方式、大量Demo，更重要的是她支持分布式，支持横纵向两种抓取模式，支持模拟登录和任务取消等！
+Pholcus（幽灵蛛）是一款纯Go语言编写的重量级爬虫软件，清新的GUI界面，优雅的爬虫规则、可控的高并发、任意的批量任务、多种输出方式、大量Demo，更重要的是它支持socket长连接、全双工并发分布式，支持横纵向两种抓取模式，支持模拟登录和任务取消等！
 
-![image](https://github.com/henrylee2cn/pholcus/blob/developer/doc/icon.png)
+![image](https://github.com/henrylee2cn/pholcus/blob/master/doc/icon.png)
 
 * 稳定版： [Version 0.4.0 (Jun 27, 2015)](https://github.com/henrylee2cn/pholcus/releases).   [此处进入](https://github.com/henrylee2cn/pholcus/tree/master)
 
@@ -12,7 +12,7 @@ Pholcus（幽灵蛛）是一款纯Go语言编写的重量级爬虫软件，清�
 
 #### 框架模块
 
-![image](https://github.com/henrylee2cn/pholcus/blob/developer/doc/project.png)
+![image](https://github.com/henrylee2cn/pholcus/blob/master/doc/project.png)
 
 
 #### 框架特点
@@ -55,7 +55,7 @@ go build -ldflags="-H windowsgui"
 
 #### 添加ICON
 
-![image](https://github.com/henrylee2cn/pholcus/blob/developer/doc/addicon.jpg)
+![image](https://github.com/henrylee2cn/pholcus/blob/master/doc/addicon.jpg)
 
 
 
@@ -73,6 +73,7 @@ go get "github.com/lxn/walk"
 go get "github.com/lxn/win"
 go get "github.com/PuerkitoBio/goquery"
 go get "github.com/henrylee2cn/surfer"
+go get "github.com/henrylee2cn/teleport"
 go get "github.com/bitly/go-simplejson"
 go get "github.com/tealeg/xlsx"
 go get "gopkg.in/mgo.v2"
@@ -85,4 +86,4 @@ go get "golang.org/x/net/html/charset"
 
 #### 开源协议
 
-Pholcus（幽灵蛛）项目采用商业应用友好的[Apache License v2](https://github.com/henrylee2cn/pholcus/blob/developer/doc/license.txt).发布
+Pholcus（幽灵蛛）项目采用商业应用友好的[Apache License v2](https://github.com/henrylee2cn/pholcus/blob/master/doc/license.txt).发布
